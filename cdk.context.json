@@ -1,0 +1,10 @@
+{
+  "hosted-zone:account=581911119805:domainName=gofaster.cloud:region=eu-west-1": {
+    "Id": "/hostedzone/Z07863433J95H4NTHF11M",
+    "Name": "gofaster.cloud."
+  },
+  "hosted-zone:account=581911119805:domainName=gofaster.cloud:region=us-east-1": {
+    "Id": "/hostedzone/Z07863433J95H4NTHF11M",
+    "Name": "gofaster.cloud."
+  }
+}
