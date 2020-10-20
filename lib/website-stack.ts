@@ -102,38 +102,41 @@ export class WebsiteStack extends cdk.Stack {
 			{ aliases: subjectAlternateNames.concat(apex) }
 		);
 
-    const staticAssetRedirectLambda = lambda.Function.fromFunctionArn(this,
-      'RedirectLambda',
-      'arn:aws:lambda:us-east-1:581911119805:function:testredirect')
+		const staticAssetRedirectLambda = lambda.Function.fromFunctionArn(
+			this,
+			'RedirectLambda',
+			'arn:aws:lambda:us-east-1:581911119805:function:testredirect'
+		);
 
 		// Configure the properties for our Cloudfront distribution
-    const staticAssetDistroProps: CloudFrontWebDistributionProps = {
-      originConfigs: [
-        {
-          s3OriginSource: {
-            s3BucketSource: staticAssetBucket,
-            originPath: '/www/static',
-            // Link an OAI to allow access to S3 from Cloudfront
-            originAccessIdentity: staticAssetOAI,
-          },
-          behaviors: [
-            {
-              isDefaultBehavior: true,
-              compress: true,
-              lambdaFunctionAssociations: [
-                {
-                  eventType: LambdaEdgeEventType.ORIGIN_REQUEST,
-                  lambdaFunction: staticAssetRedirectLambda.latestVersion
-                },
-              ],
-            },
-          ],
-          viewerCertificate: staticAssetViewerCert,
-          viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          defaultRootObject: 'index.html',
-          comment: 'Cloudfront Distribution for website - ' + apex,
-		]
-    };
+		const staticAssetDistroProps: CloudFrontWebDistributionProps = {
+			originConfigs: [
+				{
+					s3OriginSource: {
+						s3BucketSource: staticAssetBucket,
+						originPath: '/www/static',
+						// Link an OAI to allow access to S3 from Cloudfront
+						originAccessIdentity: staticAssetOAI,
+					},
+					behaviors: [
+						{
+							isDefaultBehavior: true,
+							compress: true,
+							lambdaFunctionAssociations: [
+								{
+									eventType: LambdaEdgeEventType.ORIGIN_REQUEST,
+									lambdaFunction: staticAssetRedirectLambda.latestVersion,
+								},
+							],
+						},
+					],
+				},
+			],
+			viewerCertificate: staticAssetViewerCert,
+			viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+			defaultRootObject: 'index.html',
+			comment: 'Cloudfront Distribution for website - ' + apex,
+		};
 
 		// Create our Cloudfront Distribution
 		const staticAssetDistro = new CloudFrontWebDistribution(
