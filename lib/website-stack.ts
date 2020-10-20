@@ -102,10 +102,10 @@ export class WebsiteStack extends cdk.Stack {
 			{ aliases: subjectAlternateNames.concat(apex) }
 		);
 
-		const staticAssetRedirectLambda = lambda.Function.fromFunctionArn(
+		const staticAssetRedirectLambda = lambda.Version.fromVersionArn(
 			this,
 			'RedirectLambda',
-			'arn:aws:lambda:us-east-1:581911119805:function:testredirect'
+			'arn:aws:lambda:us-east-1:581911119805:function:testredirect:1'
 		);
 
 		// Configure the properties for our Cloudfront distribution
@@ -125,7 +125,7 @@ export class WebsiteStack extends cdk.Stack {
 							lambdaFunctionAssociations: [
 								{
 									eventType: LambdaEdgeEventType.ORIGIN_REQUEST,
-									lambdaFunction: staticAssetRedirectLambda.latestVersion,
+									lambdaFunction: staticAssetRedirectLambda,
 								},
 							],
 						},
