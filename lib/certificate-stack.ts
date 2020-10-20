@@ -3,7 +3,6 @@ import * as route53 from '@aws-cdk/aws-route53';
 import * as acm from '@aws-cdk/aws-certificatemanager';
 import * as ssm from '@aws-cdk/aws-ssm';
 import { IHostedZone } from '@aws-cdk/aws-route53';
-import { Certificate } from 'crypto';
 import { DnsValidatedCertificate } from '@aws-cdk/aws-certificatemanager';
 
 export class CertificateStack extends cdk.Stack {

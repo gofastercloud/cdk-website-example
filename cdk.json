@@ -5,6 +5,6 @@
 		"aws-cdk:enableDiffNoFail": "true",
 		"@aws-cdk/core:stackRelativeExports": "true",
 		"domain_name": "gofaster.cloud",
-		"san_domain_names": "www"
+		"san_domain_names": "www,blog,private"
 	}
 }

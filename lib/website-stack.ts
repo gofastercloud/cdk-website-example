@@ -2,11 +2,14 @@ import * as cdk from '@aws-cdk/core';
 import * as route53 from '@aws-cdk/aws-route53';
 import * as route53_targets from '@aws-cdk/aws-route53-targets';
 import * as acm from '@aws-cdk/aws-certificatemanager';
+import * as lambda from '@aws-cdk/aws-lambda';
 import { BlockPublicAccess, Bucket, BucketEncryption } from '@aws-cdk/aws-s3';
 import * as s3deploy from '@aws-cdk/aws-s3-deployment';
 import {
 	CloudFrontWebDistribution,
 	CloudFrontWebDistributionProps,
+	LambdaEdgeEventType,
+	LambdaFunctionAssociation,
 	OriginAccessIdentity,
 	ViewerCertificate,
 	ViewerProtocolPolicy,
@@ -56,7 +59,7 @@ export class WebsiteStack extends cdk.Stack {
 		new s3deploy.BucketDeployment(this, 'DeployPrivateAssets', {
 			sources: [s3deploy.Source.asset('./private_assets')],
 			destinationBucket: staticAssetBucket,
-			destinationKeyPrefix: 'private/static/private',
+			destinationKeyPrefix: 'private/static',
 		});
 
 		// Create an OriginAccessIdentity to allow access to our S3 bucket
@@ -99,44 +102,38 @@ export class WebsiteStack extends cdk.Stack {
 			{ aliases: subjectAlternateNames.concat(apex) }
 		);
 
+    const staticAssetRedirectLambda = lambda.Function.fromFunctionArn(this,
+      'RedirectLambda',
+      'arn:aws:lambda:us-east-1:581911119805:function:testredirect')
+
 		// Configure the properties for our Cloudfront distribution
-		const staticAssetDistroProps: CloudFrontWebDistributionProps = {
-			originConfigs: [
-				{
-					s3OriginSource: {
-						s3BucketSource: staticAssetBucket,
-						originPath: '/www/static',
-						// Link an OAI to allow access to S3 from Cloudfront
-						originAccessIdentity: staticAssetOAI,
-					},
-					behaviors: [
-						{
-							isDefaultBehavior: true,
-							compress: true,
-						},
-					],
-				},
-				{
-					s3OriginSource: {
-						s3BucketSource: staticAssetBucket,
-						originPath: '/private/static',
-						// Link an OAI to allow access to S3 from Cloudfront
-						originAccessIdentity: staticAssetOAI,
-					},
-					behaviors: [
-						{
-							isDefaultBehavior: false,
-							pathPattern: '/private/*',
-							compress: true,
-						},
-					],
-				},
-			],
-			viewerCertificate: staticAssetViewerCert,
-			viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-			defaultRootObject: 'index.html',
-			comment: 'Cloudfront Distribution for website - ' + apex,
-		};
+    const staticAssetDistroProps: CloudFrontWebDistributionProps = {
+      originConfigs: [
+        {
+          s3OriginSource: {
+            s3BucketSource: staticAssetBucket,
+            originPath: '/www/static',
+            // Link an OAI to allow access to S3 from Cloudfront
+            originAccessIdentity: staticAssetOAI,
+          },
+          behaviors: [
+            {
+              isDefaultBehavior: true,
+              compress: true,
+              lambdaFunctionAssociations: [
+                {
+                  eventType: LambdaEdgeEventType.ORIGIN_REQUEST,
+                  lambdaFunction: staticAssetRedirectLambda.latestVersion
+                },
+              ],
+            },
+          ],
+          viewerCertificate: staticAssetViewerCert,
+          viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          defaultRootObject: 'index.html',
+          comment: 'Cloudfront Distribution for website - ' + apex,
+		]
+    };
 
 		// Create our Cloudfront Distribution
 		const staticAssetDistro = new CloudFrontWebDistribution(
