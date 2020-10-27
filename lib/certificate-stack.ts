@@ -40,11 +40,27 @@ export class CertificateStack extends cdk.Stack {
 			}
 		);
 
+		const websiteUserPoolDomain = new acm.DnsValidatedCertificate(
+			this,
+			'CognitoUserPoolDomainCert',
+			{
+				hostedZone: hostedZone,
+				domainName: 'auth.' + apex,
+			}
+		);
+
 		// Write out the ARN of the Certificate to SSM
 		new ssm.StringParameter(this, 'WebsiteSSLCertificateARN', {
 			description: 'ARN for our SSL Certificate for ' + apex,
 			parameterName: apex + '-SSLCertificate',
 			stringValue: websiteSSLCert.certificateArn,
+		});
+
+		// Write out the ARN of the Certificate to SSM
+		new ssm.StringParameter(this, 'CognitoSSLCertificateARN', {
+			description: 'ARN for our SSL Certificate for Cognito',
+			parameterName: 'CognitoCertArn',
+			stringValue: websiteUserPoolDomain.certificateArn,
 		});
 
 		new cdk.CfnOutput(this, 'WebsiteSSLCertificateOutput', {

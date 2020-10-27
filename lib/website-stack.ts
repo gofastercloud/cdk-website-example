@@ -9,13 +9,16 @@ import {
 	CloudFrontWebDistribution,
 	CloudFrontWebDistributionProps,
 	LambdaEdgeEventType,
-	LambdaFunctionAssociation,
 	OriginAccessIdentity,
+	SecurityPolicyProtocol,
 	ViewerCertificate,
 	ViewerProtocolPolicy,
 } from '@aws-cdk/aws-cloudfront';
 import { IHostedZone } from '@aws-cdk/aws-route53';
 import * as cr from '@aws-cdk/custom-resources';
+import { UserPool } from '@aws-cdk/aws-cognito';
+import * as apigw from '@aws-cdk/aws-apigateway';
+import * as path from 'path';
 
 export class WebsiteStack extends cdk.Stack {
 	constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
@@ -46,6 +49,11 @@ export class WebsiteStack extends cdk.Stack {
 			encryption: BucketEncryption.S3_MANAGED,
 			blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
 			websiteIndexDocument: 'index.html',
+		});
+
+		const logBucket: Bucket = new Bucket(this, 'LogBucket', {
+			encryption: BucketEncryption.S3_MANAGED,
+			blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
 		});
 
 		// Upload content for our site
@@ -91,6 +99,63 @@ export class WebsiteStack extends cdk.Stack {
 			}
 		);
 
+		const cognitoCertificate = new cr.AwsCustomResource(
+			this,
+			'GetCognitoCertArn',
+			{
+				onUpdate: {
+					service: 'SSM',
+					action: 'getParameter',
+					parameters: {
+						Name: 'CognitoCertArn',
+					},
+					region: 'us-east-1',
+					physicalResourceId: cr.PhysicalResourceId.of(Date.now().toString()),
+				},
+				policy: cr.AwsCustomResourcePolicy.fromSdkCalls({
+					resources: cr.AwsCustomResourcePolicy.ANY_RESOURCE,
+				}),
+			}
+		);
+
+		const privateLambdaRedirectArn = new cr.AwsCustomResource(
+			this,
+			'GetLambdaArn',
+			{
+				onUpdate: {
+					service: 'SSM',
+					action: 'getParameter',
+					parameters: {
+						Name: 'PrivateLambdaRedirectArn',
+					},
+					region: 'us-east-1',
+					physicalResourceId: cr.PhysicalResourceId.of(Date.now().toString()),
+				},
+				policy: cr.AwsCustomResourcePolicy.fromSdkCalls({
+					resources: cr.AwsCustomResourcePolicy.ANY_RESOURCE,
+				}),
+			}
+		);
+
+		const subdomainLambdaArn = new cr.AwsCustomResource(
+			this,
+			'GetSubdomainLambdaArn',
+			{
+				onUpdate: {
+					service: 'SSM',
+					action: 'getParameter',
+					parameters: {
+						Name: 'SubdomainLambdaArn',
+					},
+					region: 'us-east-1',
+					physicalResourceId: cr.PhysicalResourceId.of(Date.now().toString()),
+				},
+				policy: cr.AwsCustomResourcePolicy.fromSdkCalls({
+					resources: cr.AwsCustomResourcePolicy.ANY_RESOURCE,
+				}),
+			}
+		);
+
 		// Configure the properties for our Cloudfront distribution
 		const staticAssetViewerCert: ViewerCertificate = ViewerCertificate.fromAcmCertificate(
 			acm.Certificate.fromCertificateArn(
@@ -99,13 +164,10 @@ export class WebsiteStack extends cdk.Stack {
 				staticAssetDistroCertificate.getResponseField('Parameter.Value')
 			),
 			// Get our list of SANs and append the apex domain
-			{ aliases: subjectAlternateNames.concat(apex) }
-		);
-
-		const staticAssetRedirectLambda = lambda.Version.fromVersionArn(
-			this,
-			'RedirectLambda',
-			'arn:aws:lambda:us-east-1:581911119805:function:testredirect:1'
+			{
+				aliases: subjectAlternateNames.concat(apex),
+				securityPolicy: SecurityPolicyProtocol.TLS_V1_2_2019,
+			}
 		);
 
 		// Configure the properties for our Cloudfront distribution
@@ -125,7 +187,19 @@ export class WebsiteStack extends cdk.Stack {
 							lambdaFunctionAssociations: [
 								{
 									eventType: LambdaEdgeEventType.ORIGIN_REQUEST,
-									lambdaFunction: staticAssetRedirectLambda,
+									lambdaFunction: lambda.Version.fromVersionArn(
+										this,
+										'RedirectLambdaVersion',
+										privateLambdaRedirectArn.getResponseField('Parameter.Value')
+									),
+								},
+								{
+									eventType: LambdaEdgeEventType.VIEWER_REQUEST,
+									lambdaFunction: lambda.Version.fromVersionArn(
+										this,
+										'SubdomainLambdaVersion',
+										subdomainLambdaArn.getResponseField('Parameter.Value')
+									),
 								},
 							],
 						},
@@ -135,6 +209,11 @@ export class WebsiteStack extends cdk.Stack {
 			viewerCertificate: staticAssetViewerCert,
 			viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
 			defaultRootObject: 'index.html',
+			loggingConfig: {
+				bucket: logBucket,
+				includeCookies: true,
+				prefix: apex,
+			},
 			comment: 'Cloudfront Distribution for website - ' + apex,
 		};
 
@@ -162,5 +241,67 @@ export class WebsiteStack extends cdk.Stack {
 				domainName: apex,
 			});
 		}
+
+		const blogSite = new lambda.Function(this, 'BlogHandler', {
+			runtime: lambda.Runtime.NODEJS_12_X,
+			code: lambda.Code.fromAsset(path.join(__dirname, '../functions/blog')),
+			handler: 'index.handler',
+		});
+
+		const blogBackendSSLCert = new acm.Certificate(this, 'BlogBackendCert', {
+			domainName: 'blog-backend.' + apex,
+			validation: acm.CertificateValidation.fromDns(hostedZone),
+		});
+
+		const blogBackendAPIGw = new apigw.LambdaRestApi(this, 'BlogEndpoint', {
+			domainName: {
+				domainName: 'blog-backend.' + apex,
+				certificate: blogBackendSSLCert,
+			},
+			handler: blogSite,
+		});
+
+		new route53.ARecord(this, 'BlogBackendRecord', {
+			zone: hostedZone,
+			comment: 'DNS Record for the API Gateway Custom Domain for our Blog',
+			recordName: 'blog-backend',
+			target: route53.RecordTarget.fromAlias(
+				new route53_targets.ApiGateway(blogBackendAPIGw)
+			),
+		});
+
+		const websiteUserPool = new UserPool(this, 'WebsiteUserPool', {
+			userPoolName: 'website-userpool',
+		});
+
+		websiteUserPool.addClient('AppClient', {
+			preventUserExistenceErrors: true,
+		});
+
+		websiteUserPool.addDomain('CognitoDomain', {
+			cognitoDomain: {
+				domainPrefix: 'gofastercloud',
+			},
+		});
+
+		const authDomain = websiteUserPool.addDomain('CustomDomain', {
+			customDomain: {
+				domainName: 'auth.' + apex,
+				certificate: acm.Certificate.fromCertificateArn(
+					this,
+					'CognitoCert',
+					cognitoCertificate.getResponseField('Parameter.Value')
+				),
+			},
+		});
+
+		new route53.ARecord(this, 'CognitoCustomDomain', {
+			zone: hostedZone,
+			comment: '',
+			recordName: 'auth',
+			target: route53.RecordTarget.fromAlias(
+				new route53_targets.UserPoolDomainTarget(authDomain)
+			),
+		});
 	}
 }
