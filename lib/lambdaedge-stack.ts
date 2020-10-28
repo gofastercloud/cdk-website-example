@@ -8,7 +8,7 @@ export class LambdaEdgeStack extends cdk.Stack {
 	constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
 		super(scope, id, props);
 
-		const edgeLambdaExecutionRole = new iam.Role(
+		const edgeLambdaExecutionRole: iam.Role = new iam.Role(
 			this,
 			'EdgeLambdaExecutionRole',
 			{
@@ -24,7 +24,7 @@ export class LambdaEdgeStack extends cdk.Stack {
 			}
 		);
 
-		const privateRedirectLambda = new lambda.Function(
+		const privateRedirectLambda: lambda.Function = new lambda.Function(
 			this,
 			'PrivateRedirectLambda',
 			{
@@ -37,7 +37,7 @@ export class LambdaEdgeStack extends cdk.Stack {
 			}
 		);
 
-		const privateRedirectLambdaVersion = new lambda.Version(
+		const privateRedirectLambdaVersion: lambda.Version = new lambda.Version(
 			this,
 			'PrivateRedirectLambdaVersion',
 			{
@@ -45,16 +45,20 @@ export class LambdaEdgeStack extends cdk.Stack {
 			}
 		);
 
-		const subdomainLambda = new lambda.Function(this, 'SubdomainLambda', {
-			code: lambda.Code.fromAsset(
-				path.join(__dirname, '../functions/handle-subdomains-lambda')
-			),
-			runtime: lambda.Runtime.NODEJS_12_X,
-			handler: 'index.handler',
-			role: edgeLambdaExecutionRole,
-		});
+		const subdomainLambda: lambda.Function = new lambda.Function(
+			this,
+			'SubdomainLambda',
+			{
+				code: lambda.Code.fromAsset(
+					path.join(__dirname, '../functions/handle-subdomains-lambda')
+				),
+				runtime: lambda.Runtime.NODEJS_12_X,
+				handler: 'index.handler',
+				role: edgeLambdaExecutionRole,
+			}
+		);
 
-		const subDomainLambdaVersion = new lambda.Version(
+		const subDomainLambdaVersion: lambda.Version = new lambda.Version(
 			this,
 			'SubdomainLambdaVersion',
 			{
@@ -72,16 +76,6 @@ export class LambdaEdgeStack extends cdk.Stack {
 			description: 'ARN for our Handle Subdomain Lambda Function',
 			parameterName: 'SubdomainLambdaArn',
 			stringValue: subDomainLambdaVersion.functionArn,
-		});
-
-		new cdk.CfnOutput(this, 'PrivateRedirectLambdaOutput', {
-			exportName: 'privateRedirectLambdaArn',
-			value: privateRedirectLambdaVersion.functionArn,
-		});
-
-		new cdk.CfnOutput(this, 'SubdomainLambdaOutput', {
-			exportName: 'SubdomainLambdaArn',
-			value: subDomainLambdaVersion.functionArn,
 		});
 	}
 }

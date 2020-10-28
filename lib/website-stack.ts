@@ -225,7 +225,7 @@ export class WebsiteStack extends cdk.Stack {
 		);
 
 		// Create DNS record targetting our Cloudfront Distribution
-		new route53.ARecord(this, 'ApexRecord', {
+		const apexARecord = new route53.ARecord(this, 'ApexRecord', {
 			zone: hostedZone,
 			comment: 'Apex Record targetting Cloudfront Distribution for ' + apex,
 			target: route53.RecordTarget.fromAlias(
@@ -294,6 +294,8 @@ export class WebsiteStack extends cdk.Stack {
 				),
 			},
 		});
+
+		authDomain.node.addDependency(apexARecord);
 
 		new route53.ARecord(this, 'CognitoCustomDomain', {
 			zone: hostedZone,

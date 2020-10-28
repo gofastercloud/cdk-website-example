@@ -3,7 +3,7 @@ import * as route53 from '@aws-cdk/aws-route53';
 import * as acm from '@aws-cdk/aws-certificatemanager';
 import * as ssm from '@aws-cdk/aws-ssm';
 import { IHostedZone } from '@aws-cdk/aws-route53';
-import { DnsValidatedCertificate } from '@aws-cdk/aws-certificatemanager';
+import { Certificate } from '@aws-cdk/aws-certificatemanager';
 
 export class CertificateStack extends cdk.Stack {
 	constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
@@ -30,22 +30,22 @@ export class CertificateStack extends cdk.Stack {
 			});
 
 		// Create ACM Certificate for the Apex plus our list of SAN hostnames
-		const websiteSSLCert: DnsValidatedCertificate = new acm.DnsValidatedCertificate(
+		const websiteSSLCert: Certificate = new acm.Certificate(
 			this,
 			'WebsiteSSLCertificate',
 			{
 				domainName: apex,
-				hostedZone: hostedZone,
+				validation: acm.CertificateValidation.fromDns(hostedZone),
 				subjectAlternativeNames: subjectAlternateNames,
 			}
 		);
 
-		const websiteUserPoolDomain = new acm.DnsValidatedCertificate(
+		const websiteUserPoolDomain: Certificate = new acm.Certificate(
 			this,
 			'CognitoUserPoolDomainCert',
 			{
-				hostedZone: hostedZone,
 				domainName: 'auth.' + apex,
+				validation: acm.CertificateValidation.fromDns(hostedZone),
 			}
 		);
 
@@ -61,11 +61,6 @@ export class CertificateStack extends cdk.Stack {
 			description: 'ARN for our SSL Certificate for Cognito',
 			parameterName: 'CognitoCertArn',
 			stringValue: websiteUserPoolDomain.certificateArn,
-		});
-
-		new cdk.CfnOutput(this, 'WebsiteSSLCertificateOutput', {
-			exportName: 'SSLCertificateArn',
-			value: websiteSSLCert.certificateArn,
 		});
 	}
 }
