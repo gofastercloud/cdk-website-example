@@ -18,6 +18,7 @@ import { IHostedZone } from '@aws-cdk/aws-route53';
 import * as cr from '@aws-cdk/custom-resources';
 import { UserPool } from '@aws-cdk/aws-cognito';
 import * as apigw from '@aws-cdk/aws-apigateway';
+import * as cwlogs from '@aws-cdk/aws-logs';
 import * as path from 'path';
 
 export class WebsiteStack extends cdk.Stack {
@@ -118,7 +119,7 @@ export class WebsiteStack extends cdk.Stack {
 			}
 		);
 
-		const privateLambdaRedirectArn = new cr.AwsCustomResource(
+		const originLambdaRedirectArn = new cr.AwsCustomResource(
 			this,
 			'GetLambdaArn',
 			{
@@ -126,7 +127,7 @@ export class WebsiteStack extends cdk.Stack {
 					service: 'SSM',
 					action: 'getParameter',
 					parameters: {
-						Name: 'PrivateLambdaRedirectArn',
+						Name: 'OriginLambdaRedirectArn',
 					},
 					region: 'us-east-1',
 					physicalResourceId: cr.PhysicalResourceId.of(Date.now().toString()),
@@ -179,6 +180,7 @@ export class WebsiteStack extends cdk.Stack {
 						originPath: '/www/static',
 						// Link an OAI to allow access to S3 from Cloudfront
 						originAccessIdentity: staticAssetOAI,
+						originHeaders: { 'X-env-apex-domain': apex },
 					},
 					behaviors: [
 						{
@@ -190,7 +192,7 @@ export class WebsiteStack extends cdk.Stack {
 									lambdaFunction: lambda.Version.fromVersionArn(
 										this,
 										'RedirectLambdaVersion',
-										privateLambdaRedirectArn.getResponseField('Parameter.Value')
+										originLambdaRedirectArn.getResponseField('Parameter.Value')
 									),
 								},
 								{
@@ -253,10 +255,16 @@ export class WebsiteStack extends cdk.Stack {
 			validation: acm.CertificateValidation.fromDns(hostedZone),
 		});
 
+		const apiGwLogGroup = new cwlogs.LogGroup(this, 'ApiGwAccessLogs');
+
 		const blogBackendAPIGw = new apigw.LambdaRestApi(this, 'BlogEndpoint', {
 			domainName: {
 				domainName: 'blog-backend.' + apex,
 				certificate: blogBackendSSLCert,
+			},
+			deployOptions: {
+				accessLogDestination: new apigw.LogGroupLogDestination(apiGwLogGroup),
+				accessLogFormat: apigw.AccessLogFormat.jsonWithStandardFields(),
 			},
 			handler: blogSite,
 		});
@@ -271,17 +279,11 @@ export class WebsiteStack extends cdk.Stack {
 		});
 
 		const websiteUserPool = new UserPool(this, 'WebsiteUserPool', {
-			userPoolName: 'website-userpool',
+			userPoolName: 'website-userpool-' + apex,
 		});
 
 		websiteUserPool.addClient('AppClient', {
 			preventUserExistenceErrors: true,
-		});
-
-		websiteUserPool.addDomain('CognitoDomain', {
-			cognitoDomain: {
-				domainPrefix: 'gofastercloud',
-			},
 		});
 
 		const authDomain = websiteUserPool.addDomain('CustomDomain', {

@@ -8,6 +8,8 @@ export class LambdaEdgeStack extends cdk.Stack {
 	constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
 		super(scope, id, props);
 
+		const apex: string = this.node.tryGetContext('domain_name');
+
 		const edgeLambdaExecutionRole: iam.Role = new iam.Role(
 			this,
 			'EdgeLambdaExecutionRole',
@@ -24,12 +26,12 @@ export class LambdaEdgeStack extends cdk.Stack {
 			}
 		);
 
-		const privateRedirectLambda: lambda.Function = new lambda.Function(
+		const originRedirectLambda: lambda.Function = new lambda.Function(
 			this,
-			'PrivateRedirectLambda',
+			'OriginRedirectLambda',
 			{
 				code: lambda.Code.fromAsset(
-					path.join(__dirname, '../functions/private-redirect-lambda')
+					path.join(__dirname, '../functions/origin-redirect-lambda')
 				),
 				runtime: lambda.Runtime.NODEJS_12_X,
 				handler: 'index.handler',
@@ -37,11 +39,11 @@ export class LambdaEdgeStack extends cdk.Stack {
 			}
 		);
 
-		const privateRedirectLambdaVersion: lambda.Version = new lambda.Version(
+		const originRedirectLambdaVersion: lambda.Version = new lambda.Version(
 			this,
-			'PrivateRedirectLambdaVersion',
+			'OriginRedirectLambdaVersion',
 			{
-				lambda: privateRedirectLambda,
+				lambda: originRedirectLambda,
 			}
 		);
 
@@ -66,10 +68,10 @@ export class LambdaEdgeStack extends cdk.Stack {
 			}
 		);
 
-		new ssm.StringParameter(this, 'PrivateRedirectLambdaARN', {
-			description: 'ARN for our Private Redirect Lambda Function',
-			parameterName: 'PrivateLambdaRedirectArn',
-			stringValue: privateRedirectLambdaVersion.functionArn,
+		new ssm.StringParameter(this, 'OriginRedirectLambdaARN', {
+			description: 'ARN for our Origin Redirect Lambda Function',
+			parameterName: 'OriginLambdaRedirectArn',
+			stringValue: originRedirectLambdaVersion.functionArn,
 		});
 
 		new ssm.StringParameter(this, 'SubdomainLambdaARN', {
